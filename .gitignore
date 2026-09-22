@@ -5,6 +5,7 @@
 *.so
 *.dylib
 
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -21,3 +22,6 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+
+
+*.txt

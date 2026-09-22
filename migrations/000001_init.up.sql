@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS users (
+    login VARCHAR(255) PRIMARY KEY,
+    password_hash VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    number VARCHAR(255) PRIMARY KEY,
+    user_login VARCHAR(255) NOT NULL REFERENCES users(login) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'NEW',
+    bonus_amount NUMERIC(10, 2) DEFAULT 0,
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_login ON orders(user_login);
