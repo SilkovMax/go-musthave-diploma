@@ -162,9 +162,9 @@ func (s *PostgresStorage) GetUser(ctx context.Context, login string) (User, erro
 
 func (s *PostgresStorage) AddOrder(ctx context.Context, login, number string) error {
 	var existingLogin string
-	err := withRetry("CheckOrder", func() error {
-		return s.db.QueryRowContext(ctx, "SELECT user_login FROM orders WHERE number = $1", number).Scan(&existingLogin)
-	})
+
+	err := s.db.QueryRowContext(ctx, "SELECT user_login FROM orders WHERE number = $1", number).Scan(&existingLogin)
+
 
 	if err == nil {
 		if existingLogin == login {
@@ -223,14 +223,14 @@ func (s *PostgresStorage) GetOrdersByUser(ctx context.Context, login string) ([]
 }
 
 func (s *PostgresStorage) GetUserBalance(ctx context.Context, login string) (float64, float64, error) {
-	var current, withdrawn float64
+	var accrued, withdrawn float64
 
 	err := withRetry("GetUserBalance", func() error {
 		err := s.db.QueryRowContext(ctx, `
 			SELECT COALESCE(SUM(bonus_amount), 0)
 			FROM orders
 			WHERE user_login = $1 AND status = 'PROCESSED'
-		`, login).Scan(&current)
+		`, login).Scan(&accrued)
 		if err != nil {
 			return err
 		}
@@ -241,6 +241,8 @@ func (s *PostgresStorage) GetUserBalance(ctx context.Context, login string) (flo
 			WHERE user_login = $1
 		`, login).Scan(&withdrawn)
 	})
+
+	current := accrued - withdrawn
 
 	return current, withdrawn, err
 }
