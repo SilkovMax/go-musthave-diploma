@@ -165,7 +165,6 @@ func (s *PostgresStorage) AddOrder(ctx context.Context, login, number string) er
 
 	err := s.db.QueryRowContext(ctx, "SELECT user_login FROM orders WHERE number = $1", number).Scan(&existingLogin)
 
-
 	if err == nil {
 		if existingLogin == login {
 			return ErrOrderAlreadyProcessed
@@ -292,6 +291,11 @@ func (s *PostgresStorage) WithdrawBalance(ctx context.Context, login, orderNumbe
 		}
 		defer tx.Rollback()
 
+		_, err = tx.ExecContext(ctx, `SELECT 1 FROM users WHERE login = $1 FOR UPDATE`, login)
+		if err != nil {
+			return fmt.Errorf("блокировка пользователя: %w", err)
+		}
+
 		var currentBalance float64
 		err = tx.QueryRowContext(ctx, `
 			SELECT COALESCE(SUM(bonus_amount), 0)
@@ -359,4 +363,17 @@ func (s *PostgresStorage) GetWithdrawalsByUser(ctx context.Context, login string
 	})
 
 	return withdrawals, err
+}
+
+func (s *PostgresStorage) CreateSession(ctx context.Context, login, token string) error {
+	query := `INSERT INTO sessions (token, user_login) VALUES ($1, $2)`
+	_, err := s.db.ExecContext(ctx, query, token, login)
+	return err
+}
+
+func (s *PostgresStorage) GetLoginByToken(ctx context.Context, token string) (string, error) {
+	var login string
+	query := `SELECT user_login FROM sessions WHERE token = $1`
+	err := s.db.QueryRowContext(ctx, query, token).Scan(&login)
+	return login, err
 }

@@ -8,41 +8,47 @@ import (
 	"go.uber.org/zap"
 )
 
-type contextKey string
+type ContextKey string
 
-const userLoginKey contextKey = "userLogin"
+const UserLoginKey ContextKey = "userLogin"
 
-// проверяет наличие в куке авторазациорнных данных
-func AuthMiddleware(logger *zap.Logger) func(next http.Handler) http.Handler {
+func AuthMiddleware(logger *zap.Logger, storage interface {
+	GetLoginByToken(ctx context.Context, token string) (string, error)
+}) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var login string
+			var token string
 
 			cookie, err := r.Cookie("auth_token")
 			if err == nil && cookie.Value != "" {
-				login = cookie.Value
+				token = cookie.Value
 			} else {
 				authHeader := r.Header.Get("Authorization")
 				if strings.HasPrefix(authHeader, "Bearer ") {
-					login = strings.TrimPrefix(authHeader, "Bearer ")
+					token = strings.TrimPrefix(authHeader, "Bearer ")
 				}
 			}
 
-			// если логина нет, отклоняем запрос
-			if login == "" {
-				logger.Warn("Unauthorized error - no auth token", zap.String("path", r.URL.Path))
+			if token == "" {
+				logger.Warn("Unauthorized: missing auth token", zap.String("path", r.URL.Path))
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userLoginKey, login)
+			login, err := storage.GetLoginByToken(r.Context(), token)
+			if err != nil {
+				logger.Warn("Unauthorized: invalid token", zap.String("path", r.URL.Path))
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
 
+			ctx := context.WithValue(r.Context(), UserLoginKey, login)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 func UserLoginFromContext(ctx context.Context) (string, bool) {
-	login, ok := ctx.Value(userLoginKey).(string)
+	login, ok := ctx.Value(UserLoginKey).(string)
 	return login, ok
 }

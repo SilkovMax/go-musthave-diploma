@@ -11,15 +11,19 @@ import (
 	"github.com/yandex-praktikum/go-musthave-diploma-tpl/internal/storage"
 )
 
+type AccrualClient interface {
+	GetOrderStatus(ctx context.Context, orderNumber string) (*accrual.OrderResponse, error)
+}
+
 // фоновый воркер для проверки статусов заказов
 type AccrualWorker struct {
 	storage      storage.OrderProcessor
-	client       *accrual.Client
+	client       AccrualClient
 	logger       *zap.Logger
 	pollInterval time.Duration
 }
 
-func NewAccrualWorker(s storage.OrderProcessor, client *accrual.Client, logger *zap.Logger) *AccrualWorker {
+func NewAccrualWorker(s storage.OrderProcessor, client AccrualClient, logger *zap.Logger) *AccrualWorker {
 	return &AccrualWorker{
 		storage:      s,
 		client:       client,
@@ -69,7 +73,7 @@ func (w *AccrualWorker) processOrders(ctx context.Context) {
 	}
 }
 
-//обрабатывает один заказ
+// обрабатывает один заказ
 func (w *AccrualWorker) processSingleOrder(ctx context.Context, order storage.Order) {
 	resp, err := w.client.GetOrderStatus(ctx, order.Number)
 	if err != nil {
@@ -86,7 +90,12 @@ func (w *AccrualWorker) processSingleOrder(ctx context.Context, order storage.Or
 		return
 	}
 
+	if resp.Status == "REGISTERED" || resp.Status == "PROCESSING" {
+		resp.Status = "PROCESSING"
+	}
+
 	err = w.storage.UpdateOrderStatus(ctx, order.Number, resp.Status, resp.Accrual)
+
 	if err != nil {
 		w.logger.Error("Failed to update order status", zap.String("order", order.Number), zap.Error(err))
 		return

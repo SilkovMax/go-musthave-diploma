@@ -68,12 +68,12 @@ func main() {
 
 	router.Post("/api/user/register", authHandler.Register)
 	router.Post("/api/user/login", authHandler.Login)
-	router.With(middleware.AuthMiddleware(logger)).Post("/api/user/orders", orderHandler.UploadOrder)
-	router.With(middleware.AuthMiddleware(logger)).Get("/api/user/orders", orderHandler.GetOrders)
-	router.With(middleware.AuthMiddleware(logger)).Get("/api/user/balance", balanceHandler.GetBalance)
+	router.With(middleware.AuthMiddleware(logger, dbStore)).Post("/api/user/orders", orderHandler.UploadOrder)
+	router.With(middleware.AuthMiddleware(logger, dbStore)).Get("/api/user/orders", orderHandler.GetOrders)
+	router.With(middleware.AuthMiddleware(logger, dbStore)).Get("/api/user/balance", balanceHandler.GetBalance)
 
-	router.With(middleware.AuthMiddleware(logger)).Post("/api/user/balance/withdraw", withdrawHandler.WithdrawBalance)
-	router.With(middleware.AuthMiddleware(logger)).Get("/api/user/withdrawals", withdrawHandler.GetWithdrawals)
+	router.With(middleware.AuthMiddleware(logger, dbStore)).Post("/api/user/balance/withdraw", withdrawHandler.WithdrawBalance)
+	router.With(middleware.AuthMiddleware(logger, dbStore)).Get("/api/user/withdrawals", withdrawHandler.GetWithdrawals)
 
 	//healthcheck
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {

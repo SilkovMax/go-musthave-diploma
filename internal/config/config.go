@@ -14,11 +14,13 @@ type Config struct {
 func New() *Config {
 	cfg := &Config{}
 
-	flag.StringVar(&cfg.RunAddress, "a", "", "адрес и порт запуска сервиса")
-	flag.StringVar(&cfg.DatabaseURI, "d", "", "адрес подключения к базе данных")
-	flag.StringVar(&cfg.AccrualAddress, "r", "", "адрес системы расчёта начислений")
+	fs := flag.NewFlagSet("gophermart", flag.ContinueOnError)
 
-	flag.Parse()
+	fs.StringVar(&cfg.RunAddress, "a", "", "адрес и порт запуска сервиса")
+	fs.StringVar(&cfg.DatabaseURI, "d", "", "адрес подключения к базе данных")
+	fs.StringVar(&cfg.AccrualAddress, "r", "", "адрес системы расчёта начислений")
+
+	_ = fs.Parse(os.Args[1:])
 
 	if cfg.RunAddress == "" {
 		if env := os.Getenv("RUN_ADDRESS"); env != "" {

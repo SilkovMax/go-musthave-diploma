@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,13 +14,28 @@ import (
 	"github.com/yandex-praktikum/go-musthave-diploma-tpl/internal/storage"
 )
 
+type UserStorage interface {
+	CreateUser(ctx context.Context, login, passwordHash string) error
+	GetUser(ctx context.Context, login string) (storage.User, error)
+	CreateSession(ctx context.Context, login, token string) error
+}
+
 type AuthHandler struct {
-	storage storage.UserStorage
+	storage UserStorage
 	logger  *zap.Logger
 }
 
-func NewAuthHandler(s storage.UserStorage, l *zap.Logger) *AuthHandler {
+func NewAuthHandler(s UserStorage, l *zap.Logger) *AuthHandler {
 	return &AuthHandler{storage: s, logger: l}
+}
+
+// генерирует криптографически стойкий случайный токен.
+func generateSecureToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +57,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	hash := sha256.Sum256([]byte(req.Password))
 	hashedPassword := hex.EncodeToString(hash[:])
 
-	// Сохраняем в хранилище
 	err := h.storage.CreateUser(r.Context(), req.Login, hashedPassword)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserAlreadyExists) {
@@ -52,9 +68,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Генерируем безопасный токен
+	token := generateSecureToken()
+
+	if err := h.storage.CreateSession(r.Context(), req.Login, token); err != nil {
+		h.logger.Error("Failed to create session", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Устанавливаем в куку ТОКЕН
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
-		Value:    req.Login,
+		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 	})
@@ -62,7 +88,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Обрабатывает POST /api/user/login
+// Login обрабатывает POST /api/user/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Login    string `json:"login"`
@@ -82,7 +108,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	user, err := h.storage.GetUser(r.Context(), req.Login)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-
 			http.Error(w, "Invalid login or password", http.StatusUnauthorized)
 			return
 		}
@@ -99,9 +124,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token := generateSecureToken()
+
+	if err := h.storage.CreateSession(r.Context(), req.Login, token); err != nil {
+		h.logger.Error("Failed to create session", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
-		Value:    req.Login,
+		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 	})
